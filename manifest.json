@@ -1,0 +1,21 @@
+{
+  "name": "AI 생활비 추적기",
+  "short_name": "생활비 추적기",
+  "description": "AI가 도와주는 스마트한 생활비 추적기",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
