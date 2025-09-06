@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 생활비 계산 / 추적기</title>
+    <!-- PWA 설정 -->
+    <meta name="theme-color" content="#0ea5e9"/>
+    <link rel="manifest" href="manifest.json">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal-enter {
+            animation: fadeIn 0.3s ease-out;
+        }
+        .modal-leave {
+            animation: fadeOut 0.3s ease-in forwards;
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .prose-custom ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin-top: 1rem;
+        }
+        .prose-custom li {
+            margin-bottom: 0.5rem;
+        }
+        .prose-custom p {
+            margin-bottom: 1rem;
+        }
+        .prose-custom h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-2xl mx-auto bg-slate-800 rounded-2xl shadow-2xl p-6 md:p-8 space-y-6">
+        <!-- 헤더 -->
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-white">생활비 추적기</h1>
+            <p class="text-slate-400 mt-2">어디에 돈 쓰는지 똑바로 보자 이말이야.</p>
+        </div>
+
+        <!-- 입력 폼 -->
+        <div class="bg-slate-700 p-6 rounded-xl">
+            <h2 class="text-xl font-semibold mb-4">지출 추가</h2>
+            <form id="expense-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label for="description" class="block text-sm font-medium text-slate-300 mb-1">항목</label>
+                    <input type="text" id="description" placeholder="예: 국밥, 택시비" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                </div>
+                 <div class="md:col-span-2">
+                    <label for="memo" class="block text-sm font-medium text-slate-300 mb-1">메모 (선택)</label>
+                    <input type="text" id="memo" placeholder="예: 친구랑 더치페이" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                </div>
+                <div>
+                    <label for="amount" class="block text-sm font-medium text-slate-300 mb-1">금액 (원)</label>
+                    <input type="number" id="amount" placeholder="5000" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                </div>
+                <div>
+                     <label for="category" class="block text-sm font-medium text-slate-300 mb-1">카테고리</label>
+                    <select id="category" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                        <option>식비</option>
+                        <option>생필품</option>
+                        <option>여가</option>
+                        <option>기타</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105">
+                        추가하기
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 총 지출 -->
+        <div class="bg-slate-700 p-6 rounded-xl text-center">
+            <h2 class="text-lg font-medium text-slate-400">이번 달 총 지출</h2>
+            <p id="total-expenses" class="text-4xl font-extrabold text-white mt-2">0 원</p>
+        </div>
+        
+        <!-- Gemini AI & 세부 내역 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div class="bg-slate-700 p-6 rounded-xl text-center flex flex-col justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-white mb-2">지출 습관 분석</h2>
+                    <p class="text-slate-400 mb-4 text-sm">AI로 절약 팁을 받아보세요.</p>
+                </div>
+                <button id="analyze-button" class="w-full bg-gradient-to-r from-purple-500 to-sky-500 hover:from-purple-600 hover:to-sky-600 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                    ✨ AI 분석
+                </button>
+            </div>
+            <div class="bg-slate-700 p-6 rounded-xl text-center flex flex-col justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-white mb-2">세부 내역 & 내보내기</h2>
+                    <p class="text-slate-400 mb-4 text-sm">모든 내역을 확인하고 저장하세요.</p>
+                </div>
+                <button id="details-button" class="w-full bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                    📄 내역 보기
+                </button>
+            </div>
+        </div>
+
+        <!-- 지출 목록 -->
+        <div>
+            <div class="text-center mb-4">
+                <h2 class="text-xl font-semibold">지출 내역</h2>
+                <div id="category-totals" class="text-sm text-slate-400 mt-2 flex flex-wrap justify-center gap-x-4 gap-y-2">
+                    <!-- 카테고리별 합계가 여기에 표시됩니다. -->
+                </div>
+            </div>
+            <ul id="expense-list" class="space-y-3">
+                <!-- 지출 항목이 여기에 추가됩니다 -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="ai-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 hidden z-50">
+        <div id="modal-content-ai" class="bg-slate-800 rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-white">✨ AI 지출 분석 결과</h2>
+                <button class="close-modal-button text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div id="ai-result" class="text-slate-300 space-y-4 prose-custom max-w-none"></div>
+        </div>
+    </div>
+    
+    <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-slate-800 rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-white">세부 지출 내역</h2>
+                <button class="close-modal-button text-slate-400 hover:text-white">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="overflow-auto flex-grow">
+                <table class="w-full text-sm text-left text-slate-300">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-700">
+                        <tr>
+                            <th scope="col" class="px-6 py-3">항목</th>
+                            <th scope="col" class="px-6 py-3">금액</th>
+                            <th scope="col" class="px-6 py-3">카테고리</th>
+                            <th scope="col" class="px-6 py-3">메모</th>
+                        </tr>
+                    </thead>
+                    <tbody id="details-table-body">
+                        <!-- 세부 내역이 여기에 채워집니다. -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-6 text-right">
+                <button id="export-csv-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition">
+                    CSV로 내보내기
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const expenseForm = document.getElementById('expense-form');
+        const descriptionInput = document.getElementById('description');
+        const amountInput = document.getElementById('amount');
+        const categoryInput = document.getElementById('category');
+        const memoInput = document.getElementById('memo');
+        const expenseList = document.getElementById('expense-list');
+        const totalExpensesEl = document.getElementById('total-expenses');
+        const categoryTotalsEl = document.getElementById('category-totals');
+
+        // Buttons
+        const analyzeButton = document.getElementById('analyze-button');
+        const detailsButton = document.getElementById('details-button');
+        const exportCsvButton = document.getElementById('export-csv-button');
+        
+        // Modals
+        const aiModal = document.getElementById('ai-modal');
+        const detailsModal = document.getElementById('details-modal');
+        const closeModalButtons = document.querySelectorAll('.close-modal-button');
+
+        // Modal Content
+        const aiResult = document.getElementById('ai-result');
+        const detailsTableBody = document.getElementById('details-table-body');
+
+        let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
+        const categories = ['식비', '생필품', '여가', '기타'];
+
+        function renderExpenses() {
+            expenseList.innerHTML = ''; 
+            const hasExpenses = expenses.length > 0;
+            
+            analyzeButton.disabled = !hasExpenses;
+            detailsButton.disabled = !hasExpenses;
+
+            if (!hasExpenses) {
+                expenseList.innerHTML = `<li class="text-center text-slate-500 p-4">아직 지출 내역이 없음. 돈 안 씀?</li>`;
+                categoryTotalsEl.innerHTML = '';
+            } else {
+                expenses.forEach(expense => {
+                    const li = document.createElement('li');
+                    li.className = 'bg-slate-700/50 p-4 rounded-lg flex justify-between items-center animate-fade-in';
+                    const memoIcon = expense.memo ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block ml-2 text-slate-500"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>` : '';
+                    li.innerHTML = `
+                        <div class="flex items-center gap-4">
+                            <span class="text-sm font-semibold bg-slate-600 text-slate-300 px-2 py-1 rounded">${expense.category}</span>
+                            <div>
+                                <span class="font-medium text-white">${expense.description}</span>
+                                ${memoIcon}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-lg font-bold text-white">${Number(expense.amount).toLocaleString()} 원</span>
+                            <button onclick="deleteExpense('${expense.id}')" class="text-slate-500 hover:text-red-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            </button>
+                        </div>
+                    `;
+                    expenseList.appendChild(li);
+                });
+            }
+            updateTotals();
+            saveToLocalStorage();
+        }
+
+        function updateTotals() {
+            // 전체 합계
+            const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            totalExpensesEl.textContent = `${total.toLocaleString()} 원`;
+
+            // 카테고리별 합계
+            categoryTotalsEl.innerHTML = '';
+            const categoryTotals = categories.reduce((acc, category) => {
+                acc[category] = 0;
+                return acc;
+            }, {});
+
+            expenses.forEach(expense => {
+                if (categoryTotals.hasOwnProperty(expense.category)) {
+                    categoryTotals[expense.category] += expense.amount;
+                }
+            });
+
+            for (const category in categoryTotals) {
+                 if (categoryTotals[category] > 0) {
+                    const el = document.createElement('span');
+                    el.className = 'bg-slate-700 px-2.5 py-1 rounded-full';
+                    el.textContent = `${category}: ${categoryTotals[category].toLocaleString()}원`;
+                    categoryTotalsEl.appendChild(el);
+                 }
+            }
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('expenses', JSON.stringify(expenses));
+        }
+
+        expenseForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const description = descriptionInput.value.trim();
+            const amount = parseFloat(amountInput.value);
+            const category = categoryInput.value;
+            const memo = memoInput.value.trim();
+
+            if (description === '' || isNaN(amount) || amount <= 0) {
+                // ... validation ...
+                return;
+            }
+
+            const newExpense = {
+                id: Date.now().toString(),
+                description,
+                amount,
+                category,
+                memo
+            };
+
+            expenses.unshift(newExpense);
+            renderExpenses();
+
+            expenseForm.reset();
+            descriptionInput.focus();
+        });
+
+        window.deleteExpense = function(id) {
+            expenses = expenses.filter(expense => expense.id !== id);
+            renderExpenses();
+        }
+
+        // --- Modal Control ---
+        function openModal(modal) {
+            modal.classList.remove('hidden');
+            modal.firstElementChild.classList.remove('modal-leave');
+            modal.firstElementChild.classList.add('modal-enter');
+        }
+
+        function closeModal(modal) {
+            modal.firstElementChild.classList.remove('modal-enter');
+            modal.firstElementChild.classList.add('modal-leave');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        analyzeButton.addEventListener('click', async () => {
+            openModal(aiModal);
+            aiResult.innerHTML = '<div class="loader"></div><p class="text-center text-slate-400">AI가 지출 내역을 분석하고 있습니다...</p>';
+            try {
+                const analysis = await callGeminiAPI();
+                aiResult.innerHTML = marked.parse(analysis);
+            } catch (error) {
+                console.error('Gemini API Error:', error);
+                aiResult.innerHTML = `<p class="text-red-400 text-center">분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.</p>`;
+            }
+        });
+        
+        detailsButton.addEventListener('click', () => {
+            detailsTableBody.innerHTML = '';
+            if (expenses.length > 0) {
+                expenses.forEach(exp => {
+                    const row = detailsTableBody.insertRow();
+                    row.innerHTML = `
+                        <td class="px-6 py-4">${exp.description}</td>
+                        <td class="px-6 py-4">${exp.amount.toLocaleString()}원</td>
+                        <td class="px-6 py-4">${exp.category}</td>
+                        <td class="px-6 py-4">${exp.memo || '-'}</td>
+                    `;
+                });
+            } else {
+                 const row = detailsTableBody.insertRow();
+                 row.innerHTML = `<td colspan="4" class="text-center px-6 py-4">데이터 없음.</td>`
+            }
+            openModal(detailsModal);
+        });
+
+        closeModalButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                closeModal(button.closest('.fixed'));
+            });
+        });
+
+        // --- Export to CSV ---
+        exportCsvButton.addEventListener('click', () => {
+            if (expenses.length === 0) return;
+            const headers = ['항목', '금액', '카테고리', '메모'];
+            const rows = expenses.map(e => [e.description, e.amount, e.category, e.memo || '' ]);
+
+            let csvContent = "data:text/csv;charset=utf-8," 
+                + headers.join(",") + "\n" 
+                + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `expenses_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // --- Gemini AI ---
+        async function callGeminiAPI() {
+            // ... (Gemini API call logic is unchanged)
+            const systemPrompt = "당신은 친절하고 유능한 금융 어드바이저입니다. 사용자의 지출 목록을 기반으로 소비 습관을 분석하고, 실용적이고 이해하기 쉬운 절약 팁을 제공하는 것이 당신의 목표입니다. 한국어로 답변해주세요. 답변은 간단한 요약으로 시작하고, 그 뒤에 실행 가능한 팁 몇 가지를 글머리 기호 목록으로 구성해주세요.";
+            const expenseText = expenses.map(e => `- ${e.category}: ${e.description} (${e.amount.toLocaleString()}원)${e.memo ? ' (메모: ' + e.memo + ')' : ''}`).join('\n');
+            const userQuery = `다음은 저의 최근 지출 내역입니다. 제 소비 습관을 분석하고, 돈을 절약할 수 있는 실용적인 팁 몇 가지를 알려주세요:\n\n${expenseText}`;
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: userQuery }] }], systemInstruction: { parts: [{ text: systemPrompt }] }, };
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) { throw new Error(`API call failed with status ${response.status}`); }
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
+            if (candidate && candidate.content?.parts?.[0]?.text) { return candidate.content.parts[0].text; } 
+            else { throw new Error("API 응답에서 분석 결과를 찾을 수 없습니다."); }
+        }
+
+        // --- Initial Load ---
+        renderExpenses();
+    </script>
+    
+    <!-- PWA 서비스 워커 등록 -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+
+</body>
+</html>
+
